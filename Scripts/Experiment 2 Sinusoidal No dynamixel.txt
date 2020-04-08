@@ -1,0 +1,246 @@
+#if defined(__linux__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <termios.h>
+#define STDIN_FILENO 0
+#elif defined(_WIN32) || defined(_WIN64)
+#include <stdio.h>
+#include <NIDAQmx.h>
+#include <conio.h>
+#include<stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <ctime>   
+#include <time.h>
+#include <Windows.h>
+#include "../include\dynamixel_sdk/dynamixel_sdk.h"                                  // Uses Dynamixel SDK library
+#endif
+#include <array>
+using namespace std;
+using namespace std::chrono;
+
+//PID Variables
+double kp = 20;
+double ki = 20;
+double kd = 15;
+int timeCOunt = 0;
+double elapsedTime;
+double PIDerror;
+double lastError;
+double input, output, setPoint=1;
+double cumError, rateError;
+clock_t previousTime;
+clock_t currentTime;
+double out = 0;
+
+
+
+#define PI	3.1415926535
+
+#define DAQmxErrChk(functionCall) if( DAQmxFailed(error=(functionCall)) ) goto Error; else
+
+int getch()
+{
+#if defined(__linux__) || defined(__APPLE__)
+	struct termios oldt, newt;
+	int ch;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	return ch;
+#elif defined(_WIN32) || defined(_WIN64)
+	return _getch();
+#endif
+}
+
+int kbhit(void)
+{
+#if defined(__linux__) || defined(__APPLE__)
+	struct termios oldt, newt;
+	int ch;
+	int oldf;
+
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+	ch = getchar();
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+	if (ch != EOF)
+	{
+		ungetc(ch, stdin);
+		return 1;
+	}
+
+	return 0;
+#elif defined(_WIN32) || defined(_WIN64)
+	return _kbhit();
+#endif
+}
+
+float sum_of_array(float array[])
+{
+	float sum = 0;
+	for (int w = 0; w < 20; w++) {
+		sum = sum + array[w];
+	}
+	return sum;
+}
+
+int main(void)
+{
+	int32 read;
+	int32 error = 0;
+	TaskHandle taskHandle = 0;
+	TaskHandle taskHandle2 = 0;
+	TaskHandle taskHandle3 = 0;
+	float64 data[6];
+	float64 linear[10000];
+	
+	int i = 0;
+	int k = 0;
+	int t = 0;
+	int j = 0;
+	float plot[10000][7] = {0};
+
+	float force = 0;
+	float feedback = 0;
+	float sensor1 = 0;
+	float sensor2 = 0;
+	float sensor3 = 0;
+	float sensor4 = 0;
+
+	float forceArray[20];
+	float feedbackArray[20];
+	float sensor1Array[20];
+	float sensor2Array[20];
+	float sensor3Array[20];
+	float sensor4Array[20];
+
+	char errBuff[2048] = { '\0' };
+
+	for (int i = 0; i < 10000; i++)
+		linear[i] = 0.7 * sin((double)i * 2 * PI / 10000) + 2.4;
+
+	auto start = high_resolution_clock::now();
+	auto stop = high_resolution_clock::now();
+	DAQmxErrChk(DAQmxCreateTask("", &taskHandle));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai0", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai2", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai3", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai4", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai5", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCfgSampClkTiming(taskHandle, "", 80000, DAQmx_Val_Rising, DAQmx_Val_FiniteSamps, 2));
+	
+	
+	
+	DAQmxErrChk(DAQmxCreateTask("", &taskHandle3));
+	DAQmxErrChk(DAQmxCreateAOVoltageChan(taskHandle3, "Dev1/ao0", "", -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCfgSampClkTiming(taskHandle3, "", 1000, DAQmx_Val_Rising, DAQmx_Val_ContSamps, 10000));	
+	DAQmxErrChk(DAQmxStartTask(taskHandle3));
+	DAQmxErrChk(DAQmxWriteAnalogF64(taskHandle3, 10000, 0, 10.0, DAQmx_Val_GroupByChannel, linear, NULL, NULL));
+
+	while (1 == 1) {
+		
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() > 10000) {
+			FILE* f = fopen("Experiment2.csv", "w+");
+			for (int i = 0; i <= sizeof(plot) / sizeof(plot[0]); i++) {
+				for (int y = 0; y < 6; y++) {
+					fprintf(f, "%f, \t", plot[i][y]);
+				}
+				fprintf(f, "%f \n", plot[i][6]);
+			}
+			fclose(f);
+			
+			DAQmxStopTask(taskHandle3);
+			return 0;
+		}
+		DAQmxErrChk(DAQmxReadAnalogF64(taskHandle, 1, 10, DAQmx_Val_GroupByChannel, data, 6, &read, NULL));
+
+		
+		k = i;
+		t = i+1;
+		if (i > 20) {
+			k = i % 20;
+			t = 20;
+		}
+
+		forceArray[k] = data[0];
+		force = sum_of_array(forceArray)/t;
+
+		feedbackArray[k] = data[1];
+		feedback = sum_of_array(feedbackArray) / t;
+
+		sensor1Array[k] = data[2];
+		sensor1 = sum_of_array(sensor1Array) / t;
+
+		sensor2Array[k] = data[3];
+		sensor2 = sum_of_array(sensor2Array) / t;
+
+		sensor3Array[k] = data[4];
+		sensor3 = sum_of_array(sensor3Array) / t;
+		
+		sensor4Array[k] = data[5];
+		sensor4 = sum_of_array(sensor4Array) / t;
+		
+
+		stop = high_resolution_clock::now();
+		
+		auto duration = stop - start;
+		float time = std::chrono::duration<float>(duration).count();
+
+		plot[j][0] = time;
+		plot[j][1] = force*10;
+		plot[j][2] = feedback*10;
+		plot[j][3] = sensor1;
+		plot[j][4] = sensor2;
+		plot[j][5] = sensor3;
+		plot[j][6] = sensor4;
+
+		
+
+		//printf("%f \t", time);
+		//printf("%f \t", force);
+		//printf("%f \t", feedback);
+		//printf("%f \t", sensor1);
+		//printf("%f \t", sensor2);
+		//printf("%f \t", sensor3);
+		//printf("%f \n", sensor4);
+	
+		j = j + 1;
+		i = i + 1;
+		
+	}
+	
+	
+
+Error:
+	if (DAQmxFailed(error))
+		DAQmxGetExtendedErrorInfo(errBuff, 2048);
+	if (taskHandle != 0)
+	{
+		/*********************************************/
+		// DAQmx Stop Code
+		/*********************************************/
+		DAQmxStopTask(taskHandle);
+		DAQmxClearTask(taskHandle);
+	}
+	if (DAQmxFailed(error))
+		printf("DAQmx Error: %s\n", errBuff);
+	printf("End of program, press Enter key to quit\n");
+	getchar();
+	
+	
+}
+

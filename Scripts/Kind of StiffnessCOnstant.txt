@@ -1,0 +1,430 @@
+#if defined(__linux__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <termios.h>
+#define STDIN_FILENO 0
+#elif defined(_WIN32) || defined(_WIN64)
+#include <stdio.h>
+#include <NIDAQmx.h>
+#include <conio.h>
+#include<stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <ctime>   
+#include <time.h>
+#include <Windows.h>
+#include "../include\dynamixel_sdk/dynamixel_sdk.h"                                  // Uses Dynamixel SDK library
+#endif
+#include <array>
+using namespace std;
+using namespace std::chrono;
+
+//PID Variables
+double kp = 20;
+double ki = 20;
+double kd = 15;
+int timeCOunt = 0;
+double elapsedTime;
+double PIDerror;
+double lastError;
+double input, output, setPoint = 1;
+double cumError, rateError;
+clock_t previousTime;
+clock_t currentTime;
+double out = 0;
+
+
+// Control table address
+#define ADDR_PRO_TORQUE_ENABLE          64                 // Control table address is different in Dynamixel model
+#define ADDR_PRO_GOAL_POSITION          116
+#define ADDR_PRO_PRESENT_POSITION       132
+
+// Protocol version
+#define PROTOCOL_VERSION                2.0                 // See which protocol version is used in the Dynamixel
+
+// Default setting
+#define DXL_ID                          1                   // Dynamixel ID: 1
+#define DXL_ID2                         2                   // Dynamixel ID: 1
+#define BAUDRATE                        1000000
+#define DEVICENAME                      "COM6" 
+#define DEVICENAME2                      "COM5"// Check which port is being used on your controller
+															// ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
+
+#define TORQUE_ENABLE                   1                   // Value for enabling the torque
+#define TORQUE_DISABLE                  0                   // Value for disabling the torque
+#define DXL_MINIMUM_POSITION_VALUE      0             // Dynamixel will rotate between this value
+#define DXL_MAXIMUM_POSITION_VALUE     5000              // and this value (note that the Dynamixel would not move when the position value is out of movable range. Check e-manual about the range of the Dynamixel you use.)
+#define DXL_MOVING_STATUS_THRESHOLD     1                  // Dynamixel moving status threshold
+
+#define ESC_ASCII_VALUE                 0x1b
+
+
+
+#define PI	3.1415926535
+
+#define DAQmxErrChk(functionCall) if( DAQmxFailed(error=(functionCall)) ) goto Error; else
+
+int getch()
+{
+#if defined(__linux__) || defined(__APPLE__)
+	struct termios oldt, newt;
+	int ch;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	return ch;
+#elif defined(_WIN32) || defined(_WIN64)
+	return _getch();
+#endif
+}
+
+int kbhit(void)
+{
+#if defined(__linux__) || defined(__APPLE__)
+	struct termios oldt, newt;
+	int ch;
+	int oldf;
+
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+	ch = getchar();
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+	if (ch != EOF)
+	{
+		ungetc(ch, stdin);
+		return 1;
+	}
+
+	return 0;
+#elif defined(_WIN32) || defined(_WIN64)
+	return _kbhit();
+#endif
+}
+
+float sum_of_array(float array[])
+{
+	float sum = 0;
+	for (int w = 0; w < 20; w++) {
+		sum = sum + array[w];
+	}
+	return sum;
+}
+
+int main(void)
+{
+	// Initialize PortHandler instance
+	// Set the port path
+	// Get methods and members of PortHandlerLinux or PortHandlerWindows
+	dynamixel::PortHandler* portHandler = dynamixel::PortHandler::getPortHandler(DEVICENAME);
+	dynamixel::PortHandler* portHandler2 = dynamixel::PortHandler::getPortHandler(DEVICENAME2);
+	// Initialize PacketHandler instance
+	// Set the protocol version
+	// Get methods and members of Protocol1PacketHandler or Protocol2PacketHandler
+	dynamixel::PacketHandler* packetHandler = dynamixel::PacketHandler::getPacketHandler(PROTOCOL_VERSION);
+
+	dynamixel::PacketHandler* packetHandler2 = dynamixel::PacketHandler::getPacketHandler(1);
+	int index = 0;
+	int dxl_comm_result = COMM_TX_FAIL;             // Communication result
+	int dxl_goal_position[2] = { DXL_MINIMUM_POSITION_VALUE, DXL_MAXIMUM_POSITION_VALUE };         // Goal position
+
+	uint8_t dxl_error = 0;                          // Dynamixel error
+	int32_t dxl_present_position = 0;               // Present position
+	int32_t dxl_present_position2 = 0;
+	int16_t dxl_present_current = 0;               // Present current
+	int16_t dxl_present_current2 = 0;
+
+	int position1 = 0;
+	int position2 = 0;
+	int position;
+	int i = 0;
+	// Open port
+	if (portHandler->openPort())
+	{
+		printf("Succeeded to open the port!\n");
+	}
+	else
+	{
+		printf("Failed to open the port!\n");
+		printf("Press any key to terminate...\n");
+		getch();
+		return 0;
+	}
+
+	// Set port baudrate
+	if (portHandler->setBaudRate(BAUDRATE))
+	{
+		printf("Succeeded to change the baudrate!\n");
+	}
+	else
+	{
+		printf("Failed to change the baudrate!\n");
+		printf("Press any key to terminate...\n");
+		getch();
+		return 0;
+	}
+
+	// Enable Dynamixel Torque
+	dxl_comm_result = packetHandler->write1ByteTxRx(portHandler, DXL_ID, ADDR_PRO_TORQUE_ENABLE, TORQUE_ENABLE, &dxl_error);
+	if (dxl_comm_result != COMM_SUCCESS)
+	{
+		// printf("%s\n", packetHandler->getTxRxResult(dxl_comm_result));
+		printf("%s\n", packetHandler->getTxRxResult(dxl_comm_result));
+	}
+	else if (dxl_error != 0)
+	{
+		// printf("%s\n", packetHandler->getRxPacketError(dxl_error));
+		printf("%s\n", packetHandler->getRxPacketError(dxl_error));
+	}
+	else
+	{
+		printf("Dynamixel has been successfully connected \n");
+	}
+
+
+	// Open port2
+	if (portHandler2->openPort())
+	{
+		printf("Succeeded to open the port!\n");
+	}
+	else
+	{
+		printf("Failed to open the port!\n");
+		printf("Press any key to terminate...\n");
+		getch();
+		return 0;
+	}
+
+	// Set port baudrate
+	if (portHandler2->setBaudRate(BAUDRATE))
+	{
+		printf("Succeeded to change the baudrate!\n");
+	}
+	else
+	{
+		printf("Failed to change the baudrate!\n");
+		printf("Press any key to terminate...\n");
+		getch();
+		return 0;
+	}
+
+	// Enable Dynamixel Torque
+	dxl_comm_result = packetHandler->write1ByteTxRx(portHandler2, DXL_ID2, ADDR_PRO_TORQUE_ENABLE, TORQUE_ENABLE, &dxl_error);
+	if (dxl_comm_result != COMM_SUCCESS)
+	{
+		// printf("%s\n", packetHandler->getTxRxResult(dxl_comm_result));
+		printf("%s\n", packetHandler->getTxRxResult(dxl_comm_result));
+	}
+	else if (dxl_error != 0)
+	{
+		// printf("%s\n", packetHandler->getRxPacketError(dxl_error));
+		printf("%s\n", packetHandler->getRxPacketError(dxl_error));
+	}
+	else
+	{
+		printf("Dynamixel has been successfully connected \n");
+	}
+
+
+	int32 read;
+	int32 error = 0;
+	TaskHandle taskHandle = 0;
+	TaskHandle taskHandle2 = 0;
+	TaskHandle taskHandle3 = 0;
+	float64 data[6];
+	float64 linear[10000];
+
+	i = 0;
+	int k = 0;
+	int t = 0;
+	int j = 0;
+	int p = 0;
+	float plot[1000][11] = { 0 };
+
+	float force = 0;
+	float feedback = 0;
+	float sensor1 = 0;
+	float sensor2 = 0;
+	float sensor3 = 0;
+	float sensor4 = 0;
+
+	int target = 0;
+
+	float forceArray[20];
+	float feedbackArray[20];
+	float sensor1Array[20];
+	float sensor2Array[20];
+	float sensor3Array[20];
+	float sensor4Array[20];
+
+	char errBuff[2048] = { '\0' };
+
+	for (int i = 0; i < 1000; i++)
+		linear[i] = 0.3 * sin((double)i * 2 * PI / 1000) + 2.4;
+
+	
+
+	auto starttimer = high_resolution_clock::now();
+	auto stoptimer = high_resolution_clock::now();
+
+	auto start = high_resolution_clock::now();
+	auto stop = high_resolution_clock::now();
+	auto loopstart = high_resolution_clock::now();
+
+
+	
+
+	DAQmxErrChk(DAQmxCreateTask("", &taskHandle));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai0", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai1", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai2", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai3", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai4", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCreateAIVoltageChan(taskHandle, "Dev1/ai5", "", DAQmx_Val_Cfg_Default, -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCfgSampClkTiming(taskHandle, "", 1000, DAQmx_Val_Rising, DAQmx_Val_ContSamps, 2));
+	
+
+
+	DAQmxErrChk(DAQmxCreateTask("", &taskHandle3));
+	DAQmxErrChk(DAQmxCreateAOVoltageChan(taskHandle3, "Dev1/ao0", "", -10.0, 10.0, DAQmx_Val_Volts, NULL));
+	DAQmxErrChk(DAQmxCfgSampClkTiming(taskHandle3, "", 100, DAQmx_Val_Rising, DAQmx_Val_ContSamps, 1000));
+	DAQmxErrChk(DAQmxStartTask(taskHandle3));
+	DAQmxErrChk(DAQmxWriteAnalogF64(taskHandle3, 1000, 0,10, DAQmx_Val_GroupByChannel, linear, NULL, NULL));
+
+	start = high_resolution_clock::now();
+	while (1 == 1) {
+
+
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() > 10000) {
+			FILE* f = fopen("Experiment10ConstantStiffness.csv", "w+");
+			for (int i = 0; i <= sizeof(plot) / sizeof(plot[0]); i++) {
+				for (int y = 0; y < 10; y++) {
+					fprintf(f, "%f, \t", plot[i][y]);
+				}
+				fprintf(f, "%f \n", plot[i][10]);
+			}
+			fclose(f);
+
+			dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL_ID, ADDR_PRO_GOAL_POSITION, 2100, &dxl_error);
+			dxl_comm_result = packetHandler->write4ByteTxRx(portHandler2, DXL_ID2, ADDR_PRO_GOAL_POSITION, 1200, &dxl_error);
+			
+			std::fill_n(linear, 1000, 2.4);
+
+			DAQmxStopTask(taskHandle3);
+			DAQmxErrChk(DAQmxStartTask(taskHandle3));
+			DAQmxErrChk(DAQmxWriteAnalogF64(taskHandle3, 1000, 0, 10.0, DAQmx_Val_GroupByChannel, linear, NULL, NULL));
+			DAQmxStopTask(taskHandle3);
+			
+			return 0;
+		}
+
+
+		auto loopend = high_resolution_clock::now();
+		float looptime = std::chrono::duration<float>(loopend - stop).count();
+
+		if (looptime > 0.01) {
+			/*starttimer = high_resolution_clock::now();*/
+
+			p = p + 2;
+			stop = high_resolution_clock::now();
+			auto duration = stop - start;
+			float time = std::chrono::duration<float>(duration).count();
+			DAQmxErrChk(DAQmxStartTask(taskHandle));
+			DAQmxErrChk(DAQmxReadAnalogF64(taskHandle, 1, 10, DAQmx_Val_GroupByChannel, data, 6, &read, NULL));
+			DAQmxStopTask(taskHandle);
+
+			packetHandler->read2ByteTxRx(portHandler2, DXL_ID2, ADDR_PRO_PRESENT_POSITION, (uint16_t*)&dxl_present_position2);
+			packetHandler->read2ByteTxRx(portHandler2, DXL_ID2, 126, (uint16_t*)&dxl_present_current2, &dxl_error);
+
+			packetHandler->read2ByteTxRx(portHandler, DXL_ID, ADDR_PRO_PRESENT_POSITION, (uint16_t*)&dxl_present_position);
+			packetHandler->read2ByteTxRx(portHandler, DXL_ID, 126, (uint16_t*)&dxl_present_current, &dxl_error);
+
+	
+
+			k = i;
+			t = i + 1;
+			if (i > 20) {
+				k = i % 20;
+				t = 20;
+			}
+
+			forceArray[k] = data[0];
+			force = sum_of_array(forceArray) / t;
+
+			feedbackArray[k] = data[1];
+			feedback = sum_of_array(feedbackArray) / t;
+
+			sensor1Array[k] = data[2];
+			sensor1 = sum_of_array(sensor1Array) / t;
+
+			sensor2Array[k] = data[3];
+			sensor2 = sum_of_array(sensor2Array) / t;
+
+			sensor3Array[k] = data[4];
+			sensor3 = sum_of_array(sensor3Array) / t;
+
+			sensor4Array[k] = data[5];
+			sensor4 = sum_of_array(sensor4Array) / t;
+
+			plot[j][0] = time;
+			plot[j][1] = (force - 2.44) * 38.4516;
+			plot[j][2] = feedback; //* 2.032 * 10;
+			plot[j][3] = sensor1;
+			plot[j][4] = sensor2;
+			plot[j][5] = sensor3;
+			plot[j][6] = sensor4;
+
+			plot[j][7] = dxl_present_position;
+			plot[j][8] = dxl_present_position2;
+
+			plot[j][9] = (dxl_present_current * 4.5) / 1000;
+			plot[j][10] = (dxl_present_current2 * 4.5) / 1000;
+
+			target = ((feedback - 2.4 * 2.032 * 10) / 7.64 / PI / 0.044) * 180;
+			dxl_comm_result = packetHandler->write4ByteTxRx(portHandler, DXL_ID, ADDR_PRO_GOAL_POSITION, 2100-target, &dxl_error);
+			dxl_comm_result = packetHandler->write4ByteTxRx(portHandler2, DXL_ID2, ADDR_PRO_GOAL_POSITION, 1200+target, &dxl_error);
+
+
+			j = j + 1;
+			i = i + 1;
+
+			/*stoptimer = high_resolution_clock::now();
+			float timer = std::chrono::duration<float>(starttimer - stoptimer).count();
+			printf("%f\n", timer);*/
+
+		}
+
+	}
+
+
+
+Error:
+	if (DAQmxFailed(error))
+		DAQmxGetExtendedErrorInfo(errBuff, 2048);
+	if (taskHandle != 0)
+	{
+		/*********************************************/
+		// DAQmx Stop Code
+		/*********************************************/
+		DAQmxStopTask(taskHandle);
+		DAQmxClearTask(taskHandle);
+	}
+	if (DAQmxFailed(error))
+		printf("DAQmx Error: %s\n", errBuff);
+	printf("End of program, press Enter key to quit\n");
+	getchar();
+
+
+}
+
