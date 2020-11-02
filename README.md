@@ -1,5 +1,5 @@
 # LinearVariableStiffnessHoneycomb
-This repository contains files od different types and extensions related to my project "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing".
+This repository contains files of different types and extensions related to my project "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing".
 
 This code was designed and tested in Microsoft Visual Studio.
 
