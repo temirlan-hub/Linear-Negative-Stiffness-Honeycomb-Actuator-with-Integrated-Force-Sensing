@@ -3,7 +3,7 @@ This repository contains files of different types and extensions related to my p
 
 This code was designed and tested in Microsoft Visual Studio.
 
-The "Source.cpp" file is an example of a working code. All the other variations of the codes are presented in the "Scripts" file.
+The "Source.cpp" file is an example of a working code. All the other variations of the codes are presented in the "Scripts" folder.
 They are presented in txt format so you will only need to copy-paste them to your source code. 
 
 Also it is very important to properly install the Dynamixel and Daq libraries for C.
