@@ -1,6 +1,7 @@
 # LinearVariableStiffnessHoneycomb
 
-![SetupPhotoExp](https://user-images.githubusercontent.com/63325614/121165913-71712700-c872-11eb-8d9a-d0bc4e8ffad9.jpg)
+![SetupPhotoExpPpr](https://user-images.githubusercontent.com/63325614/121167309-a336bd80-c873-11eb-8d87-9b36b4c171f6.jpg)
+
 
 This repository contains files of different types and extensions related to my project "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing".
 
