@@ -14,6 +14,8 @@ All PCB schematic projects were made in Altium Designer software.
 
 The "PrintedParts.zip" file contains .cad/.stl files of all parts and details involved in project. All the files were designed in SolidWorks software and printed with Ultimaker 3D printer using polylactide (PLA) material.
 
+The link to the paper based on this project: https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9158855
+
 For Dynamixel library this link will be useful: http://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/library_setup/c_windows/#c-windows
 
 For using NI-DAQ in different softwares NIDAQMX will be usefull:
