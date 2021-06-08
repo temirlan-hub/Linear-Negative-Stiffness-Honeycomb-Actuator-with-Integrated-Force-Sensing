@@ -1,7 +1,9 @@
 # LinearVariableStiffnessHoneycomb
 This repository contains files of different types and extensions related to my project "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing".
 
-This code was designed and tested in Microsoft Visual Studio.
+T. Galimzhanov, A. Zhakatayev, R. Kashapov, Z. Kappassov and H. A. Varol, "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing," 2020 IEEE/ASME International Conference on Advanced Intelligent Mechatronics (AIM), 2020, pp. 1589-1594, doi: 10.1109/AIM43001.2020.9158855.
+
+The code was designed and tested in Microsoft Visual Studio.
 
 The "Source.cpp" file is an example of a working code. All the other variations of the codes are presented in the "Scripts" folder.
 They are presented in txt format so you will only need to copy-paste them to your source code. 
