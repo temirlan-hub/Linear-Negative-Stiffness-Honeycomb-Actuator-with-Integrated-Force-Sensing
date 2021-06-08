@@ -22,6 +22,8 @@ The "PrintedParts.zip" file contains .cad/.stl files of all parts and details in
 
 The link to the paper based on this project: https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9158855
 
+Video demonstrating conducted experiments: https://www.youtube.com/watch?v=hucbCuGjXc0
+
 For Dynamixel library this link will be useful: http://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/library_setup/c_windows/#c-windows
 
 For using NI-DAQ in different softwares NIDAQMX will be usefull:
