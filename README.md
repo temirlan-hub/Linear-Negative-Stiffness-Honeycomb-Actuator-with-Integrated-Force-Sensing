@@ -1,11 +1,11 @@
-# LinearVariableStiffnessHoneycomb
+# Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing
 
 ![SetupPhotoExpPpr](https://user-images.githubusercontent.com/63325614/121167309-a336bd80-c873-11eb-8d87-9b36b4c171f6.jpg)
 
-
 This repository contains files of different types and extensions related to my project "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing".
 
-T. Galimzhanov, A. Zhakatayev, R. Kashapov, Z. Kappassov and H. A. Varol, "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing," 2020 IEEE/ASME International Conference on Advanced Intelligent Mechatronics (AIM), 2020, pp. 1589-1594, doi: 10.1109/AIM43001.2020.9158855.
+***For citation:**
+T. Galimzhanov, A. Zhakatayev, R. Kashapov, Z. Kappassov and H. A. Varol, "Linear Negative Stiffness Honeycomb Actuator with Integrated Force Sensing," 2020 IEEE/ASME International Conference on Advanced Intelligent Mechatronics (AIM), 2020, pp. 1589-1594, doi: 10.1109/AIM43001.2020.9158855.*
 
 The code was designed and tested in Microsoft Visual Studio.
 
@@ -27,4 +27,4 @@ For Dynamixel library this link will be useful: http://emanual.robotis.com/docs/
 For using NI-DAQ in different softwares NIDAQMX will be usefull:
 https://www.ni.com/ru-ru/support/downloads/drivers/download.ni-daqmx.html#333268
 
-Extra: The "3Axial_magnetic_field_sensor" file contains the schematic project of designed PCB to acquire data from magnetic sensor MLX90333, Melexis. This information may be useful for follow-up projects.
+*Extra: The "3Axial_magnetic_field_sensor" file contains the schematic project of designed PCB to acquire data from magnetic sensor MLX90333, Melexis. This information may be useful for follow-up projects.*
