@@ -21,3 +21,4 @@ For Dynamixel library this link will be useful: http://emanual.robotis.com/docs/
 For using NI-DAQ in different softwares NIDAQMX will be usefull:
 https://www.ni.com/ru-ru/support/downloads/drivers/download.ni-daqmx.html#333268
 
+Extra: The "3Axial_magnetic_field_sensor" file contains the schematic project of designed PCB to acquire data from magnetic sensor MLX90333, Melexis. This information may be useful for follow-up projects.
